@@ -38,13 +38,14 @@ jobs:
           fi
 
       - name: Deploy via SSM
+        id: ssm
         run: |
           if [ "${{ steps.req_check.outputs.changed }}" = "true" ]; then
             PIP_CMD="/home/ec2-user/Workit/venv/bin/pip install -r /home/ec2-user/Workit/requirements.txt"
           else
             PIP_CMD="echo 'requirements.txt unchanged, skipping pip install'"
           fi
-          aws ssm send-command \
+          COMMAND_ID=$(aws ssm send-command \
             --instance-ids ${{ secrets.EC2_INSTANCE_ID }} \
             --document-name "AWS-RunShellScript" \
             --timeout-seconds 600 \
@@ -55,4 +56,22 @@ jobs:
               \"cd /home/ec2-user/Workit && /home/ec2-user/Workit/venv/bin/python manage.py migrate --noinput\",
               \"cd /home/ec2-user/Workit && /home/ec2-user/Workit/venv/bin/python manage.py collectstatic --noinput\",
               \"sudo systemctl restart gunicorn celery\"
-            ]}"
+            ]}" \
+            --query "Command.CommandId" \
+            --output text)
+          echo "command_id=$COMMAND_ID" >> $GITHUB_OUTPUT
+
+      - name: Wait for SSM command
+        run: |
+          aws ssm wait command-executed \
+            --command-id ${{ steps.ssm.outputs.command_id }} \
+            --instance-id ${{ secrets.EC2_INSTANCE_ID }}
+
+      - name: Print SSM output
+        if: always()
+        run: |
+          aws ssm get-command-invocation \
+            --command-id ${{ steps.ssm.outputs.command_id }} \
+            --instance-id ${{ secrets.EC2_INSTANCE_ID }} \
+            --query "[StandardOutputContent, StandardErrorContent]" \
+            --output text
