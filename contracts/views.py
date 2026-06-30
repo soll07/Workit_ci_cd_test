@@ -258,7 +258,10 @@ def document_page_image(request, doc_id, page):
         from pdf2image import convert_from_path
         import io, shutil, tempfile
 
-        poppler_path = r"C:\poppler-24.08.0\Library\bin"
+        poppler_path = None if os.name != 'nt' else r"C:\poppler-24.08.0\Library\bin"
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
+            tmp_path = tmp.name
+            tmp.write(doc.file.read())
 
         # 한글 경로 문제 해결 - 임시 파일로 복사
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
@@ -297,7 +300,12 @@ def document_page_count(request, doc_id):
         from pdf2image import pdfinfo_from_path
         import io
         
-        poppler_path = r"C:\poppler-24.08.0\Library\bin"
+        poppler_path = None if os.name != 'nt' else r"C:\poppler-24.08.0\Library\bin"
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
+            tmp_path = tmp.name
+            tmp.write(doc.file.read())
+        info = pdfinfo_from_path(tmp_path, poppler_path=poppler_path)
+        os.unlink(tmp_path)
 
         info = pdfinfo_from_path(
             doc.file.path,
